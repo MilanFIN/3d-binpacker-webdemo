@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import init, { WasmOptimizer } from 'rustport';
+import init, { WasmOptimizer, pack } from 'rustport';
 import { Viewer } from './components/Viewer';
 import { Sidebar } from './components/Sidebar';
 import type { SidebarConfig } from './components/Sidebar';
@@ -17,6 +17,7 @@ function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [wasmReady, setWasmReady] = useState(false);
   const [isImported, setIsImported] = useState(false);
+  const [mode, setMode] = useState<'optimizer' | 'oneshot'>('optimizer');
   
   const [config, setConfig] = useState<SidebarConfig>({
     solver: "best_fit_ems",
@@ -133,6 +134,44 @@ function App() {
     stopRef.current = true;
   };
 
+  const handleRunOneShot = () => {
+    if (!wasmReady) return;
+    setIsRunning(true);
+    try {
+      // Sort boxes largest-volume-first for best greedy packing
+      const sortedBoxes = [...boxes].sort(
+        (a, b) => (b.w * b.h * b.d) - (a.w * a.h * a.d)
+      );
+      const jsConfig = {
+        bin: { w: config.binW, h: config.binH, d: config.binD, max_weight: 0 },
+        boxes: sortedBoxes.map(b => ({ id: b.id, w: b.w, h: b.h, d: b.d, weight: b.weight })),
+        solver: config.solver,
+        rotation_axes: [0, 1, 2]
+      };
+      const result: JsResult = pack(jsConfig);
+      if (result) {
+        const nextBoxes: CloudBox[] = result.packed.map(pb => ({
+          id: pb.id,
+          w: pb.w,
+          h: pb.h,
+          d: pb.d,
+          x: pb.x,
+          y: pb.y,
+          z: pb.z,
+          binIndex: pb.bin_index,
+          weight: pb.weight,
+          color: colorsRef.current[pb.id] || '#ffffff'
+        }));
+        setBoxes(nextBoxes);
+        setStats({ binCount: result.bin_count, score: result.score });
+      }
+    } catch (err) {
+      console.error('One-shot packing failed:', err);
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
   const handleImportCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -191,7 +230,10 @@ function App() {
       </div>
 
       <Sidebar 
+        mode={mode}
+        onModeChange={setMode}
         onStartOptimization={handleStartOptimization}
+        onRunOneShot={handleRunOneShot}
         onStop={handleStop}
         config={config}
         onConfigChange={(newPart) => setConfig({ ...config, ...newPart })}

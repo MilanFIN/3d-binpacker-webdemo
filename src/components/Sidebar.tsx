@@ -11,7 +11,10 @@ export interface SidebarConfig {
 }
 
 interface SidebarProps {
+  mode: 'optimizer' | 'oneshot';
+  onModeChange: (mode: 'optimizer' | 'oneshot') => void;
   onStartOptimization: () => void;
+  onRunOneShot: () => void;
   onStop: () => void;
   config: SidebarConfig;
   onConfigChange: (newConfig: Partial<SidebarConfig>) => void;
@@ -28,7 +31,10 @@ interface SidebarProps {
  * A premium floating sidebar for controls and statistics.
  */
 export const Sidebar: React.FC<SidebarProps> = ({ 
+  mode,
+  onModeChange,
   onStartOptimization,
+  onRunOneShot,
   onStop,
   config,
   onConfigChange,
@@ -46,6 +52,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside className="sidebar">
       <div className="sidebar-section">
         <h2>Configuration</h2>
+
+        {/* Mode toggle */}
+        <div className="mode-toggle">
+          <button
+            className={`mode-toggle-btn${mode === 'optimizer' ? ' active' : ''}`}
+            onClick={() => onModeChange('optimizer')}
+            disabled={isRunning}
+          >Optimizer</button>
+          <button
+            className={`mode-toggle-btn${mode === 'oneshot' ? ' active' : ''}`}
+            onClick={() => onModeChange('oneshot')}
+            disabled={isRunning}
+          >One-Shot</button>
+        </div>
+
         <div className="config-form">
           <div className="config-group">
             <label>Algorithm</label>
@@ -61,35 +82,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </select>
           </div>
 
-          <div className="config-row">
-            <div className="config-group config-group--compact">
-              <label>Pop.</label>
-              <input 
-                type="number" 
-                value={config.populationSize} 
-                onChange={(e) => onConfigChange({ populationSize: parseInt(e.target.value) || 0 })}
-                disabled={isRunning}
-              />
+
+          {mode === 'optimizer' && (
+            <div className="config-row">
+              <div className="config-group config-group--compact">
+                <label>Pop.</label>
+                <input 
+                  type="number" 
+                  value={config.populationSize} 
+                  onChange={(e) => onConfigChange({ populationSize: parseInt(e.target.value) || 0 })}
+                  disabled={isRunning}
+                />
+              </div>
+              <div className="config-group config-group--compact">
+                <label>Gens.</label>
+                <input 
+                  type="number" 
+                  value={config.generations} 
+                  onChange={(e) => onConfigChange({ generations: parseInt(e.target.value) || 0 })}
+                  disabled={isRunning}
+                />
+              </div>
+              <div className="config-group config-group--compact">
+                <label>Elite</label>
+                <input 
+                  type="number" 
+                  value={config.eliteCount} 
+                  onChange={(e) => onConfigChange({ eliteCount: parseInt(e.target.value) || 0 })}
+                  disabled={isRunning}
+                />
+              </div>
             </div>
-            <div className="config-group config-group--compact">
-              <label>Gens.</label>
-              <input 
-                type="number" 
-                value={config.generations} 
-                onChange={(e) => onConfigChange({ generations: parseInt(e.target.value) || 0 })}
-                disabled={isRunning}
-              />
-            </div>
-            <div className="config-group config-group--compact">
-              <label>Elite</label>
-              <input 
-                type="number" 
-                value={config.eliteCount} 
-                onChange={(e) => onConfigChange({ eliteCount: parseInt(e.target.value) || 0 })}
-                disabled={isRunning}
-              />
-            </div>
-          </div>
+          )}
           <div className="sidebar-divider" style={{ margin: '8px 0' }} />
           <div className="config-row">
             <div className="config-group config-group--compact">
@@ -167,7 +191,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <div className="sidebar-footer" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {isRunning ? (
+        {isRunning && mode === 'optimizer' ? (
           <button 
             className="primary-button stop-button" 
             onClick={onStop}
@@ -177,9 +201,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ) : (
           <button 
             className="primary-button" 
-            onClick={onStartOptimization}
+            onClick={mode === 'optimizer' ? onStartOptimization : onRunOneShot}
+            disabled={isRunning}
           >
-            Start Optimization
+            {mode === 'optimizer' ? 'Start Optimization' : 'Run'}
           </button>
         )}
         <button 
