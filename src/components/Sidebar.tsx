@@ -1,16 +1,25 @@
+import React, { useRef } from 'react';
+
 export interface SidebarConfig {
   solver: "best_fit_ems" | "first_fit_ems" | "best_fit_3d" | "first_fit_3d";
   populationSize: number;
   eliteCount: number;
+  generations: number;
+  binW: number;
+  binH: number;
+  binD: number;
 }
 
 interface SidebarProps {
   onStartOptimization: () => void;
   config: SidebarConfig;
   onConfigChange: (newConfig: Partial<SidebarConfig>) => void;
+  isRunning: boolean;
+  canExport: boolean;
   binCount: number;
   score: number;
-  isRunning: boolean;
+  onImportCsv: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onExportCsv: () => void;
 }
 
 /**
@@ -20,10 +29,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onStartOptimization, 
   config,
   onConfigChange,
-  binCount, 
+  isRunning,
+  canExport,
+  binCount,
   score,
-  isRunning
+  onImportCsv,
+  onExportCsv
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <aside className="sidebar">
       <div className="sidebar-section">
@@ -44,8 +58,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           <div className="config-row">
-            <div className="config-group">
-              <label>Population</label>
+            <div className="config-group config-group--compact">
+              <label>Pop.</label>
               <input 
                 type="number" 
                 value={config.populationSize} 
@@ -53,7 +67,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 disabled={isRunning}
               />
             </div>
-            <div className="config-group">
+            <div className="config-group config-group--compact">
+              <label>Gens.</label>
+              <input 
+                type="number" 
+                value={config.generations} 
+                onChange={(e) => onConfigChange({ generations: parseInt(e.target.value) || 0 })}
+                disabled={isRunning}
+              />
+            </div>
+            <div className="config-group config-group--compact">
               <label>Elite</label>
               <input 
                 type="number" 
@@ -63,11 +86,64 @@ export const Sidebar: React.FC<SidebarProps> = ({
               />
             </div>
           </div>
+          <div className="sidebar-divider" style={{ margin: '8px 0' }} />
+          <div className="config-row">
+            <div className="config-group config-group--compact">
+              <label>W</label>
+              <input 
+                type="number" 
+                value={config.binW} 
+                onChange={(e) => onConfigChange({ binW: parseInt(e.target.value) || 0 })}
+                disabled={isRunning}
+              />
+            </div>
+            <div className="config-group config-group--compact">
+              <label>H</label>
+              <input 
+                type="number" 
+                value={config.binH} 
+                onChange={(e) => onConfigChange({ binH: parseInt(e.target.value) || 0 })}
+                disabled={isRunning}
+              />
+            </div>
+            <div className="config-group config-group--compact">
+              <label>D</label>
+              <input 
+                type="number" 
+                value={config.binD} 
+                onChange={(e) => onConfigChange({ binD: parseInt(e.target.value) || 0 })}
+                disabled={isRunning}
+              />
+            </div>
+          </div>
         </div>
       </div>
       
       <div className="sidebar-divider" />
       
+      <div className="sidebar-section">
+        <h2>Data</h2>
+        <div className="stat-grid" style={{ gridTemplateColumns: '1fr', gap: '8px' }}>
+          <input 
+            type="file" 
+            accept=".csv" 
+            ref={fileInputRef} 
+            onChange={onImportCsv}
+            style={{ display: 'none' }}
+          />
+          <button 
+            className="primary-button" 
+            style={{ padding: '0.75rem', fontSize: '0.9rem', background: '#333', color: '#fff' }}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isRunning}
+          >
+            Import CSV
+          </button>
+        </div>
+      </div>
+      
+      <div className="sidebar-divider" />
+
       <div className="sidebar-section">
         <h2>Statistics</h2>
         <div className="stat-grid">
@@ -82,13 +158,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      <div className="sidebar-footer">
+      <div className="sidebar-footer" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <button 
           className="primary-button" 
           onClick={onStartOptimization}
           disabled={isRunning}
         >
           {isRunning ? 'Optimizing...' : 'Start Optimization'}
+        </button>
+        <button 
+          className="primary-button" 
+          style={{ padding: '0.75rem', fontSize: '0.9rem', background: '#333', color: '#fff' }}
+          onClick={onExportCsv}
+          disabled={isRunning || !canExport}
+        >
+          Export Solution CSV
         </button>
       </div>
     </aside>

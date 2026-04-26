@@ -3,11 +3,9 @@ import init, { WasmOptimizer } from 'rustport';
 import { Viewer } from './components/Viewer';
 import { Sidebar } from './components/Sidebar';
 import type { SidebarConfig } from './components/Sidebar';
-import { generateRandomBoxes, createBoxCloud } from './utils/boxUtils';
+import { generateRandomBoxes, createBoxCloud, parseCsvBoxes, formatCsvExport } from './utils/boxUtils';
 import type { CloudBox, JsResult } from './utils/boxUtils';
 import './App.css';
-
-const BIN_SIZE = { w: 100, h: 100, d: 100 };
 
 /**
  * Main application component.
@@ -17,11 +15,16 @@ function App() {
   const [stats, setStats] = useState({ binCount: 1, score: 0 });
   const [isRunning, setIsRunning] = useState(false);
   const [wasmReady, setWasmReady] = useState(false);
+  const [isImported, setIsImported] = useState(false);
   
   const [config, setConfig] = useState<SidebarConfig>({
     solver: "best_fit_ems",
     populationSize: 32,
-    eliteCount: 4
+    eliteCount: 4,
+    generations: 20,
+    binW: 100,
+    binH: 100,
+    binD: 100
   });
 
   const optimizerRef = useRef<WasmOptimizer | null>(null);
@@ -45,7 +48,9 @@ function App() {
     
     setBoxes(cloudValue);
     // Reset optimizer on new box generation
-    optimizerRef.current = null;
+    if (optimizerRef.current) {
+      optimizerRef.current = null;
+    }
   }, []);
 
   const handleStartOptimization = async () => {
@@ -57,17 +62,20 @@ function App() {
       const configChanged = 
         config.solver !== prevConfigRef.current.solver ||
         config.populationSize !== prevConfigRef.current.populationSize ||
-        config.eliteCount !== prevConfigRef.current.eliteCount;
+        config.eliteCount !== prevConfigRef.current.eliteCount ||
+        config.binW !== prevConfigRef.current.binW ||
+        config.binH !== prevConfigRef.current.binH ||
+        config.binD !== prevConfigRef.current.binD;
 
       if (configChanged) {
-        optimizerRef.current = null;
+        if (optimizerRef.current) optimizerRef.current = null;
         prevConfigRef.current = config;
       }
 
       // Initialize optimizer if first run after reset
       if (!optimizerRef.current) {
         const jsConfig = {
-          bin: { ...BIN_SIZE, max_weight: 0 },
+          bin: { w: config.binW, h: config.binH, d: config.binD, max_weight: 0 },
           boxes: boxes.map(b => ({ id: b.id, w: b.w, h: b.h, d: b.d, weight: b.weight })),
           solver: config.solver,
           population_size: config.populationSize,
@@ -79,25 +87,34 @@ function App() {
         optimizerRef.current = new WasmOptimizer(jsConfig);
       }
 
-      // Run one iteration
-      const result: JsResult = optimizerRef.current.run_generation();
+      // Run multiple iterations
+      let result: JsResult | null = null;
+      for (let i = 0; i < config.generations; i++) {
+        result = optimizerRef.current.run_generation();
+        // Yield to browser event loop every 10 generations to prevent UI freezing
+        if (i % 10 === 0 && config.generations > 10) {
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
 
-      // Update boxes with new positions and bin indices
-      const nextBoxes: CloudBox[] = result.packed.map(pb => ({
-        id: pb.id,
-        w: pb.w,
-        h: pb.h,
-        d: pb.d,
-        x: pb.x,
-        y: pb.y,
-        z: pb.z,
-        binIndex: pb.bin_index,
-        weight: pb.weight,
-        color: colorsRef.current[pb.id] || '#ffffff'
-      }));
+      if (result) {
+        // Update boxes with new positions and bin indices
+        const nextBoxes: CloudBox[] = result.packed.map(pb => ({
+          id: pb.id,
+          w: pb.w,
+          h: pb.h,
+          d: pb.d,
+          x: pb.x,
+          y: pb.y,
+          z: pb.z,
+          binIndex: pb.bin_index,
+          weight: pb.weight,
+          color: colorsRef.current[pb.id] || '#ffffff'
+        }));
 
-      setBoxes(nextBoxes);
-      setStats({ binCount: result.bin_count, score: result.score });
+        setBoxes(nextBoxes);
+        setStats({ binCount: result.bin_count, score: result.score });
+      }
     } catch (err) {
       console.error("Optimization failed:", err);
     } finally {
@@ -105,14 +122,61 @@ function App() {
     }
   };
 
+  const handleImportCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (text) {
+        const rawBoxes = parseCsvBoxes(text);
+        if (rawBoxes.length > 0) {
+          const cloudValue = createBoxCloud(rawBoxes);
+          
+          const colors: Record<number, string> = {};
+          cloudValue.forEach(b => { colors[b.id] = b.color; });
+          colorsRef.current = colors;
+          
+          setBoxes(cloudValue);
+          setStats({ binCount: 1, score: 0 });
+          setIsImported(true);
+          optimizerRef.current = null;
+        } else {
+          alert('No valid boxes found in CSV');
+        }
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleExportCsv = () => {
+    const csvText = formatCsvExport(boxes);
+    if (!csvText || csvText.trim() === "Bin,Box,x, y, z, w ,h ,d" || csvText.split('\n').length <= 2) {
+       alert('No solution to export – run the solver first.');
+       return;
+    }
+
+    const blob = new Blob([csvText], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'solution.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="app-container">
-      <Viewer boxes={boxes} binCount={stats.binCount} binSize={BIN_SIZE} />
+      <Viewer boxes={boxes} binCount={stats.binCount} binSize={{ w: config.binW, h: config.binH, d: config.binD }} />
       
       {/* UI Overlay */}
       <div className="ui-overlay">
-        <h1>Rustport Bin Packer</h1>
-        <p>{boxes.length} Boxes Generated</p>
+        <h1>3d Binpacker</h1>
+        <p>{boxes.length} {isImported ? 'Boxes to be packed' : 'Boxes pre-generated for demo use'}</p>
       </div>
 
       <Sidebar 
@@ -120,8 +184,11 @@ function App() {
         config={config}
         onConfigChange={(newPart) => setConfig({ ...config, ...newPart })}
         isRunning={isRunning}
+        canExport={boxes.some(b => b.binIndex !== undefined)}
         binCount={stats.binCount}
         score={stats.score}
+        onImportCsv={handleImportCsv}
+        onExportCsv={handleExportCsv}
       />
     </div>
   );

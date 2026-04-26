@@ -150,3 +150,61 @@ export function createBoxCloud(
 
   return cloud;
 }
+
+/**
+ * Parses boxes from a CSV string matching the Java demo format.
+ * Format: w, h, d, [weight] 
+ */
+export function parseCsvBoxes(csvText: string): JsBox[] {
+  const boxes: JsBox[] = [];
+  const lines = csvText.split('\n');
+  let idCounter = 0;
+
+  for (let line of lines) {
+    line = line.trim();
+    if (!line || line.startsWith('#')) continue;
+
+    const parts = line.split(',');
+    if (parts.length >= 3) {
+      const w = parseFloat(parts[0].trim());
+      const h = parseFloat(parts[1].trim());
+      const d = parseFloat(parts[2].trim());
+      let weight = 0;
+      if (parts.length >= 4) {
+        weight = parseFloat(parts[3].trim());
+      }
+      
+      if (!isNaN(w) && !isNaN(h) && !isNaN(d)) {
+        boxes.push({ id: idCounter++, w, h, d, weight });
+      }
+    }
+  }
+
+  return boxes;
+}
+
+/**
+ * Formats packed boxes into a CSV string matching Java's exportCsv.
+ * Format: Bin,Box,x, y, z, w ,h ,d \n
+ */
+export function formatCsvExport(boxes: CloudBox[]): string {
+  let csv = "Bin,Box,x, y, z, w ,h ,d \n";
+  const binnedBoxes: Record<number, CloudBox[]> = {};
+
+  for (const box of boxes) {
+    if (box.binIndex !== undefined) {
+      if (!binnedBoxes[box.binIndex]) binnedBoxes[box.binIndex] = [];
+      binnedBoxes[box.binIndex].push(box);
+    }
+  }
+
+  // Iterate over bins sorted by index
+  const sortedBins = Object.keys(binnedBoxes).map(Number).sort((a, b) => a - b);
+  for (const binIndex of sortedBins) {
+    for (const box of binnedBoxes[binIndex]) {
+      csv += `${binIndex},${box.id},${box.x},${box.y},${box.z},${box.w},${box.h},${box.d}\n`;
+    }
+  }
+
+  return csv;
+}
