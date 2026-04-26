@@ -13,6 +13,7 @@ import './App.css';
 function App() {
   const [boxes, setBoxes] = useState<CloudBox[]>([]);
   const [stats, setStats] = useState({ binCount: 1, score: 0 });
+  const [generationCount, setGenerationCount] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [wasmReady, setWasmReady] = useState(false);
   const [isImported, setIsImported] = useState(false);
@@ -30,6 +31,7 @@ function App() {
   const optimizerRef = useRef<WasmOptimizer | null>(null);
   const prevConfigRef = useRef<SidebarConfig>(config);
   const colorsRef = useRef<Record<number, string>>({});
+  const stopRef = useRef<boolean>(false);
 
   // Initialize Wasm on mount
   useEffect(() => {
@@ -55,6 +57,7 @@ function App() {
 
   const handleStartOptimization = async () => {
     if (!wasmReady) return;
+    stopRef.current = false;
     setIsRunning(true);
 
     try {
@@ -70,6 +73,7 @@ function App() {
       if (configChanged) {
         if (optimizerRef.current) optimizerRef.current = null;
         prevConfigRef.current = config;
+        setGenerationCount(0);
       }
 
       // Initialize optimizer if first run after reset
@@ -87,39 +91,46 @@ function App() {
         optimizerRef.current = new WasmOptimizer(jsConfig);
       }
 
-      // Run multiple iterations
-      let result: JsResult | null = null;
+      // Run generations one at a time, yielding to the browser between each
+      // so React can repaint with the latest best result.
+      let bestScore = stats.score;
       for (let i = 0; i < config.generations; i++) {
-        result = optimizerRef.current.run_generation();
-        // Yield to browser event loop every 10 generations to prevent UI freezing
-        if (i % 10 === 0 && config.generations > 10) {
-          await new Promise(r => setTimeout(r, 0));
+        if (stopRef.current) break;
+
+        const result: JsResult = optimizerRef.current.run_generation();
+        setGenerationCount(prev => prev + 1);
+
+        // Paint immediately if this generation produced a better solution
+        if (result && result.score > bestScore) {
+          bestScore = result.score;
+          const nextBoxes: CloudBox[] = result.packed.map(pb => ({
+            id: pb.id,
+            w: pb.w,
+            h: pb.h,
+            d: pb.d,
+            x: pb.x,
+            y: pb.y,
+            z: pb.z,
+            binIndex: pb.bin_index,
+            weight: pb.weight,
+            color: colorsRef.current[pb.id] || '#ffffff'
+          }));
+          setBoxes(nextBoxes);
+          setStats({ binCount: result.bin_count, score: result.score });
         }
-      }
 
-      if (result) {
-        // Update boxes with new positions and bin indices
-        const nextBoxes: CloudBox[] = result.packed.map(pb => ({
-          id: pb.id,
-          w: pb.w,
-          h: pb.h,
-          d: pb.d,
-          x: pb.x,
-          y: pb.y,
-          z: pb.z,
-          binIndex: pb.bin_index,
-          weight: pb.weight,
-          color: colorsRef.current[pb.id] || '#ffffff'
-        }));
-
-        setBoxes(nextBoxes);
-        setStats({ binCount: result.bin_count, score: result.score });
+        // Yield to browser event loop so the UI can repaint and handle stop clicks
+        await new Promise(r => setTimeout(r, 0));
       }
     } catch (err) {
       console.error("Optimization failed:", err);
     } finally {
       setIsRunning(false);
     }
+  };
+
+  const handleStop = () => {
+    stopRef.current = true;
   };
 
   const handleImportCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -181,12 +192,14 @@ function App() {
 
       <Sidebar 
         onStartOptimization={handleStartOptimization}
+        onStop={handleStop}
         config={config}
         onConfigChange={(newPart) => setConfig({ ...config, ...newPart })}
         isRunning={isRunning}
         canExport={boxes.some(b => b.binIndex !== undefined)}
         binCount={stats.binCount}
         score={stats.score}
+        generationCount={generationCount}
         onImportCsv={handleImportCsv}
         onExportCsv={handleExportCsv}
       />

@@ -20,8 +20,8 @@ export function Viewer({ boxes, binCount, binSize }: ViewerProps) {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#0a0a0a' }}>
       <Canvas shadows>
-        <PerspectiveCamera makeDefault position={[400, 400, 400]} fov={50} />
-        <OrbitControls makeDefault />
+        <PerspectiveCamera makeDefault position={[binSize.w / 2, binSize.h * 1.2, binSize.d * 10]} fov={50} />
+        <OrbitControls makeDefault target={[binSize.w / 2, binSize.h / 2, binSize.d / 2]} />
 
         <ambientLight intensity={0.5} />
         <pointLight position={[200, 600, 200]} intensity={2} castShadow />

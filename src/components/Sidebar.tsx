@@ -12,12 +12,14 @@ export interface SidebarConfig {
 
 interface SidebarProps {
   onStartOptimization: () => void;
+  onStop: () => void;
   config: SidebarConfig;
   onConfigChange: (newConfig: Partial<SidebarConfig>) => void;
   isRunning: boolean;
   canExport: boolean;
   binCount: number;
   score: number;
+  generationCount: number;
   onImportCsv: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onExportCsv: () => void;
 }
@@ -26,13 +28,15 @@ interface SidebarProps {
  * A premium floating sidebar for controls and statistics.
  */
 export const Sidebar: React.FC<SidebarProps> = ({ 
-  onStartOptimization, 
+  onStartOptimization,
+  onStop,
   config,
   onConfigChange,
   isRunning,
   canExport,
   binCount,
   score,
+  generationCount,
   onImportCsv,
   onExportCsv
 }) => {
@@ -146,7 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <div className="sidebar-section">
         <h2>Statistics</h2>
-        <div className="stat-grid">
+        <div className="stat-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
           <div className="stat-item">
             <span className="stat-label">Bins</span>
             <span className="stat-value">{binCount || '--'}</span>
@@ -155,17 +159,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="stat-label">Score</span>
             <span className="stat-value">{score ? score.toFixed(4) : '--'}</span>
           </div>
+          <div className="stat-item">
+            <span className="stat-label">Generations</span>
+            <span className="stat-value">{generationCount || '--'}</span>
+          </div>
         </div>
       </div>
 
       <div className="sidebar-footer" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <button 
-          className="primary-button" 
-          onClick={onStartOptimization}
-          disabled={isRunning}
-        >
-          {isRunning ? 'Optimizing...' : 'Start Optimization'}
-        </button>
+        {isRunning ? (
+          <button 
+            className="primary-button stop-button" 
+            onClick={onStop}
+          >
+            Stop
+          </button>
+        ) : (
+          <button 
+            className="primary-button" 
+            onClick={onStartOptimization}
+          >
+            Start Optimization
+          </button>
+        )}
         <button 
           className="primary-button" 
           style={{ padding: '0.75rem', fontSize: '0.9rem', background: '#333', color: '#fff' }}
