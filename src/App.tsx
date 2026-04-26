@@ -150,6 +150,19 @@ function App() {
       };
       const result: JsResult = pack(jsConfig);
       if (result) {
+        // Calculate score for one-shot: sum of box volumes in bins 0 to (bin_count - 2)
+        // divided by total volume of those bins.
+        let calculatedScore = 0;
+        if (result.bin_count > 1) {
+          const binVolume = config.binW * config.binH * config.binD;
+          const fullBinsVolume = (result.bin_count - 1) * binVolume;
+          
+          const packedBoxesInFullBins = result.packed.filter(pb => pb.bin_index < result.bin_count - 1);
+          const packedVolume = packedBoxesInFullBins.reduce((sum, pb) => sum + (pb.w * pb.h * pb.d), 0);
+          
+          calculatedScore = packedVolume / fullBinsVolume;
+        }
+
         const nextBoxes: CloudBox[] = result.packed.map(pb => ({
           id: pb.id,
           w: pb.w,
@@ -163,7 +176,7 @@ function App() {
           color: colorsRef.current[pb.id] || '#ffffff'
         }));
         setBoxes(nextBoxes);
-        setStats({ binCount: result.bin_count, score: result.score });
+        setStats({ binCount: result.bin_count, score: calculatedScore });
       }
     } catch (err) {
       console.error('One-shot packing failed:', err);
