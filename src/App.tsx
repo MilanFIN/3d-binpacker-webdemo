@@ -18,6 +18,7 @@ function App() {
   const [wasmReady, setWasmReady] = useState(false);
   const [isImported, setIsImported] = useState(false);
   const [mode, setMode] = useState<'optimizer' | 'oneshot'>('optimizer');
+  const [gpuError, setGpuError] = useState<string | null>(null);
   
   const [config, setConfig] = useState<SidebarConfig>({
     solver: "best_fit_ems",
@@ -112,11 +113,21 @@ function App() {
           const initialOrders = gpuPoolRef.current.get_current_orders_flat();
           
           if (gpuStateRef.current) gpuStateRef.current.free();
-          gpuStateRef.current = await init_gpu_generation_state(
-              flatBoxes, initialOrders, 
-              config.binW, config.binH, config.binD, 0, 7,
-              config.gpuMaxBins, config.gpuMaxSpaces, config.gpuBatchSize
-          );
+          try {
+            gpuStateRef.current = await init_gpu_generation_state(
+                flatBoxes, initialOrders, 
+                config.binW, config.binH, config.binD, 0, 7,
+                config.gpuMaxBins, config.gpuMaxSpaces, config.gpuBatchSize
+            );
+          } catch (gpuErr) {
+            const msg = gpuErr instanceof Error
+              ? gpuErr.message
+              : typeof gpuErr === 'string' ? gpuErr : String(gpuErr);
+            console.error('WebGPU init failed:', gpuErr);
+            setGpuError(msg);
+            setIsRunning(false);
+            return;
+          }
         }
       } else {
         if (!cpuOptimizerRef.current) {
@@ -127,6 +138,7 @@ function App() {
       // Run generations one at a time, yielding to the browser between each
       // so React can repaint with the latest best result.
       let bestScore = stats.score;
+      let currentGpuBestScore = stats.score;
       for (let i = 0; i < config.generations; i++) {
         if (stopRef.current) break;
 
@@ -135,10 +147,22 @@ function App() {
         if (config.computeMode === 'gpu') {
           const orders = gpuPoolRef.current!.get_current_orders_flat();
           const scores = await gpuStateRef.current.evaluate(orders);
+          
+          let genBestScore = -Infinity;
+          for (let j = 0; j < scores.length; j++) {
+            if (scores[j] > genBestScore) {
+              genBestScore = scores[j];
+            }
+          }
+          
           gpuPoolRef.current!.advance_generation(scores);
           
           // CPU Fallback to reconstruct winning permutation for rendering
-          result = evaluate_single_placement(jsConfig, gpuPoolRef.current!.get_best_order());
+          // Only do this if the GPU found a strictly better score
+          if (genBestScore > currentGpuBestScore) {
+            currentGpuBestScore = genBestScore;
+            result = evaluate_single_placement(jsConfig, gpuPoolRef.current!.get_best_order());
+          }
         } else {
           result = cpuOptimizerRef.current!.run_generation();
         }
@@ -248,7 +272,8 @@ function App() {
           setBoxes(cloudValue);
           setStats({ binCount: 1, score: 0 });
           setIsImported(true);
-          optimizerRef.current = null;
+          if (cpuOptimizerRef.current) cpuOptimizerRef.current = null;
+          if (gpuPoolRef.current) gpuPoolRef.current = null;
         } else {
           alert('No valid boxes found in CSV');
         }
@@ -302,6 +327,34 @@ function App() {
         onImportCsv={handleImportCsv}
         onExportCsv={handleExportCsv}
       />
+
+      {/* WebGPU error modal */}
+      {gpuError !== null && (
+        <div
+          className="webgpu-error-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="webgpu-error-title"
+          onClick={(e) => { if (e.target === e.currentTarget) setGpuError(null); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') setGpuError(null); }}
+          tabIndex={-1}
+        >
+          <div className="webgpu-error-card">
+            <div className="webgpu-error-icon">⚠️</div>
+            <h2 id="webgpu-error-title">WebGPU Not Available</h2>
+            <p>Your browser or device could not initialise the WebGPU adapter. GPU-accelerated features will be unavailable.</p>
+            {gpuError && (
+              <div className="webgpu-error-detail">{gpuError}</div>
+            )}
+            <div className="webgpu-error-links">
+              <a href="https://caniuse.com/webgpu" target="_blank" rel="noopener noreferrer">Browser support ↗</a>
+              <a href="https://developer.chrome.com/docs/capabilities/webgpu" target="_blank" rel="noopener noreferrer">Chrome guide ↗</a>
+              <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API" target="_blank" rel="noopener noreferrer">MDN WebGPU ↗</a>
+            </div>
+            <button className="webgpu-error-dismiss" onClick={() => setGpuError(null)}>Dismiss</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

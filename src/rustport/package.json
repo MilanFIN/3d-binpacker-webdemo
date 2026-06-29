@@ -1,0 +1,15 @@
+{
+  "name": "rustport",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "rustport_bg.wasm",
+    "rustport.js",
+    "rustport.d.ts"
+  ],
+  "main": "rustport.js",
+  "types": "rustport.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
