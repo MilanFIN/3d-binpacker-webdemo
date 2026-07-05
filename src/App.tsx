@@ -19,6 +19,7 @@ function App() {
   const [isImported, setIsImported] = useState(false);
   const [mode, setMode] = useState<'optimizer' | 'oneshot'>('optimizer');
   const [gpuError, setGpuError] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
   
   const [config, setConfig] = useState<SidebarConfig>({
     solver: "best_fit_ems",
@@ -49,7 +50,7 @@ function App() {
 
   // Generate initial cloud
   useEffect(() => {
-    const rawBoxes = generateRandomBoxes(100);
+    const rawBoxes = generateRandomBoxes(130);
     const cloudValue = createBoxCloud(rawBoxes);
     
     // Store colors for consistency
@@ -310,6 +311,52 @@ function App() {
         <h1>3d Binpacker</h1>
         <p>{boxes.length} {isImported ? 'Boxes to be packed' : 'Boxes pre-generated for demo use'}</p>
       </div>
+
+      {/* Help Button */}
+      <button 
+        className="help-button"
+        onClick={() => setHelpOpen(true)}
+        aria-label="Help"
+      >
+        ?
+      </button>
+
+      {/* Help Modal */}
+      {helpOpen && (
+        <div
+          className="help-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => { if (e.target === e.currentTarget) setHelpOpen(false); }}
+        >
+          <div className="help-modal-card">
+            <h2>About 3D Binpacker</h2>
+            <div className="help-modal-content">
+              <h3>What this app does</h3>
+              <p>This web application visualizes the 3D bin packing problem. The goal is to efficiently pack a set of given boxes into the minimum number of larger bins. The solver determines the position, orientation, and bin index for each box to optimize space utilization.</p>
+
+              <h3>One-Shot vs Optimization</h3>
+              <p><strong>One-Shot</strong> packing runs a single, deterministic greedy algorithm to pack the boxes once. It is fast and suitable for immediate results.<br/>
+              <strong>Optimization</strong> uses a Genetic Algorithm (GA) to iteratively improve the packing over multiple generations. It explores various random permutations and selects the best ones to "breed" better solutions over time, yielding denser packing at the cost of computation time.</p>
+
+              <h3>Input Fields</h3>
+              <p><strong>Population Size:</strong> The number of different packing permutations evaluated in each generation. A larger population explores more possibilities but takes longer to compute.<br/>
+              <strong>Generations:</strong> The number of iterations the genetic algorithm will run. More generations can lead to better results.<br/>
+              <strong>Elite Count:</strong> The number of best-performing solutions carried over directly to the next generation without modification, ensuring the best result is never lost.<br/>
+              <strong>Algorithm:</strong> The underlying heuristic used to pack a given sequence of boxes (e.g., Best Fit EMS).</p>
+
+              <h3>CPU vs GPU Computing</h3>
+              <p><strong>CPU Computing</strong> Individual packing attempts are computed on the CPU..<br/>
+              <strong>GPU Computing (WebGPU)</strong> Offloads the evaluation of packing attemts to the gpu via WebGPU</p>
+
+              <h3>CSV Formats</h3>
+              <p><strong>Input:</strong> Each line represents a box in the format <code>width, height, depth, [weight]</code>. The weight parameter is optional. Lines starting with <code>#</code> are ignored.<br/>
+              <strong>Output:</strong> The exported solution includes a header row followed by lines in the format <code>Bin, Box, x, y, z, w, h, d</code> representing each packed box's bin assignment, ID (index in input csv), position, and dimensions.</p>
+            </div>
+            <button className="help-modal-close" onClick={() => setHelpOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
 
       <Sidebar 
         mode={mode}

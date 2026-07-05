@@ -56,6 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside className="sidebar">
+      <div className="sidebar-scroll-area">
       <div className="sidebar-section">
         <h2>Configuration</h2>
 
@@ -272,6 +273,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="stat-value">{generationCount || '--'}</span>
           </div>
         </div>
+      </div>
       </div>
 
       <div className="sidebar-footer" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
