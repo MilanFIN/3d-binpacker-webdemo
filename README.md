@@ -2,6 +2,8 @@
 
 This is a Vite-based demo for the 3d binpacker implementation in rust & webassembly.
 
+See at [https://binpacker.vercel.app/](https://binpacker.vercel.app/)
+
 ## Key Features
 
 * Interactive 3D visualization of bins and boxes.
