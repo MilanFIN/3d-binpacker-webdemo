@@ -14,7 +14,7 @@
     "@react-three/fiber": "^9.6.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "rustport": "file:../rustport/pkg",
+    "rustport": "file:./src/rustport",
     "three": "^0.184.0",
     "vite-plugin-top-level-await": "^1.6.0",
     "vite-plugin-wasm": "^3.6.0"
