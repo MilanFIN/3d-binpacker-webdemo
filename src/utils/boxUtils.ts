@@ -208,3 +208,89 @@ export function formatCsvExport(boxes: CloudBox[]): string {
 
   return csv;
 }
+
+export interface JsSphere {
+  id: number;
+  radius: number;
+  weight: number;
+}
+
+export interface JsPackedSphere {
+  id: number;
+  bin_index: number;
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+  weight: number;
+}
+
+export interface JsResultSpheres {
+  packed: JsPackedSphere[];
+  bin_count: number;
+  score: number;
+}
+
+export interface CloudSphere extends JsSphere {
+  x: number;
+  y: number;
+  z: number;
+  binIndex?: number;
+  color: string;
+}
+
+export function generateRandomSpheres(
+  count: number,
+  minRadius: number = 5,
+  maxRadius: number = 20
+): JsSphere[] {
+  const spheres: JsSphere[] = [];
+  for (let i = 0; i < count; i++) {
+    spheres.push({
+      id: i,
+      radius: Math.floor(Math.random() * (maxRadius - minRadius + 1)) + minRadius,
+      weight: Math.random() * 10,
+    });
+  }
+  return spheres;
+}
+
+export function createSphereCloud(
+  spheres: JsSphere[],
+  baseSpacing: number = 60
+): CloudSphere[] {
+  const count = spheres.length;
+  const gridSize = Math.ceil(Math.pow(count, 1/3));
+  const cloud: CloudSphere[] = [];
+  const offset = ((gridSize - 1) * baseSpacing) / 2;
+
+  let index = 0;
+  for (let gx = 0; gx < gridSize && index < count; gx++) {
+    for (let gy = 0; gy < gridSize && index < count; gy++) {
+      for (let gz = 0; gz < gridSize && index < count; gz++) {
+        const sphere = spheres[index];
+        const jitter = baseSpacing * 0.2;
+        const jx = (Math.random() - 0.5) * jitter;
+        const jy = (Math.random() - 0.5) * jitter;
+        const jz = (Math.random() - 0.5) * jitter;
+
+        const x = gx * baseSpacing - offset + jx;
+        const y = gy * baseSpacing - offset + jy;
+        const z = gz * baseSpacing - offset + jz;
+
+        const hue = Math.floor(Math.random() * 360);
+        const color = `hsl(${hue}, 70%, 60%)`;
+
+        cloud.push({
+          ...sphere,
+          x, y, z,
+          color
+        });
+        
+        index++;
+      }
+    }
+  }
+
+  return cloud;
+}

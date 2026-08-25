@@ -1,6 +1,34 @@
-# Rustport
+# 3D Binpacker (Rust)
 
-A bin-packing library ported to Rust with WebAssembly support.
+A high-performance 3D bin-packing library ported to Rust, supporting both native and WebAssembly targets optional GPU acceleration.
+
+Contains two stages: The packing algorithm and an genetic algorithm based optimizer that iterates over packing solutions to search for denser results.
+
+[![Tests](https://github.com/MilanFIN/3d-binpacker-rust/actions/workflows/tests.yml/badge.svg)](https://github.com/MilanFIN/3d-binpacker-rust/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
+## Related Projects
+* **Web Demo**: An interactive demo for this project's usage [https://github.com/MilanFIN/3d-binpacker-webdemo](https://github.com/MilanFIN/3d-binpacker-webdemo).
+* **Reference Implementation**: The reference Java implementation of this optimizer is available at [https://github.com/MilanFIN/gpu-binpacker](https://github.com/MilanFIN/gpu-binpacker).
+
+## Compute Modes
+
+### Native Support
+* **CPU Computing**: Uses multithreading to evaluate multiple packing attempts in parallel.
+* **GPU Computing**: Uses **OpenCL** to offload packing attempt calculations to the GPU. Requires the `opencl` feature flag (see [Features](#features)).
+
+### Web Support
+* **CPU Computing**: Uses **WebAssembly (Wasm)**.
+* **GPU Computing**: Uses **WebGPU** to run the packing attempts on the GPU, the optimizer is identical to the CPU version
+
+## Features
+
+| Feature | Default | Description |
+|---------|---------|-------------|
+| `parallel` | ❌ | Enables multithreaded CPU solver via `rayon`. |
+| `opencl` | ❌ | Enables the native OpenCL GPU solver. Requires `libOpenCL` to be installed on the system (e.g. `ocl-icd-opencl-dev` on Debian/Ubuntu). |
+
+> **Note:** OpenCL is **opt-in** and disabled by default. The standard `cargo build` / `cargo test` workflow does **not** require any GPU drivers or OpenCL runtime to be present.
 
 ## Building
 
@@ -10,16 +38,73 @@ To build the library for your local machine:
 cargo build --release
 ```
 
+To enable rayon
+```bash
+cargo build --release --features parallel
+```
+
+To enable OpenCL GPU support (requires `libOpenCL` installed):
+```bash
+cargo build --release --features opencl
+```
+
 ### WebAssembly
 To build for web browsers or JS bundlers:
 ```bash
 wasm-pack build --target web
-
-or 
-
-cargo build --target wasm32-unknown-unknown
 ```
+*(Alternatively: `cargo build --target wasm32-unknown-unknown`)*
+
 This generates a `pkg/` directory containing the Wasm binary and JS glue code.
 
-## Usage
+## Usage & Data Formats
+
 The JavaScript interface is defined in `src/wasm_api.rs`. It provides a stateful `WasmOptimizer` for genetic-algorithm based bin packing and a one-shot `pack` function.
+
+### Input Format (CSV)
+When importing box data (as often used in the demo or testing), each line should represent a box in the following format:
+`width, height, depth, [weight]`
+
+*The weight parameter is optional. Lines starting with `#` are ignored.*
+
+### Output Format (CSV)
+Exported solutions follow this format:
+`Bin, Box, x, y, z, w, h, d`
+
+*Representing each packed box's bin assignment, ID, position (x, y, z), and dimensions (w, h, d).*
+
+## Testing
+
+### Unit Tests (Native)
+
+Runs all `#[test]` functions across the library's modules (data models, solvers, optimizer):
+
+```bash
+cargo test
+```
+
+To also see output from passing tests:
+
+```bash
+cargo test -- --nocapture
+```
+
+### Integration Tests (WebAssembly)
+
+The WASM integration tests live in `tests/wasm_api_tests.rs` and exercise the full
+JSON → Rust → WASM → Rust → JSON pipeline for every public entry-point
+(`pack`, `WasmOptimizer`, `WasmGeneticPool`, `evaluate_single_placement`).
+They require `wasm-pack` and a headless browser driver.
+
+**Firefox:**
+```bash
+wasm-pack test --headless --firefox -- --test wasm_api_tests
+```
+
+**Chrome:**
+```bash
+wasm-pack test --headless --chrome -- --test wasm_api_tests
+```
+
+> **Note:** Chrome may require `--no-sandbox` in some CI or containerised environments.
+> If the Chrome driver crashes, prefer the Firefox variant.

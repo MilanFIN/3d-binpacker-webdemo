@@ -1,7 +1,8 @@
 import React, { useRef } from 'react';
 
 export interface SidebarConfig {
-  solver: "best_fit_ems" | "first_fit_ems" | "best_fit_3d" | "first_fit_3d";
+  shape: 'box' | 'sphere';
+  solver: "best_fit_ems" | "first_fit_ems" | "best_fit_3d" | "first_fit_3d" | "advancing_front";
   gpuSolver: "best_fit_ems";        // only one GPU kernel for now
   computeMode: 'cpu' | 'gpu';
   populationSize: number;
@@ -10,6 +11,8 @@ export interface SidebarConfig {
   binW: number;
   binH: number;
   binD: number;
+  binRadius: number;
+  enableGapFill: boolean;
   gpuBatchSize: number;
   gpuMaxBins: number;
   gpuMaxSpaces: number;
@@ -60,17 +63,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="sidebar-section">
         <h2>Configuration</h2>
 
+        {/* ── Shape toggle ── */}
+        <div className="mode-toggle" style={{ marginBottom: 12 }}>
+          <button
+            className={`mode-toggle-btn${config.shape === 'box' ? ' active' : ''}`}
+            onClick={() => onConfigChange({ shape: 'box' })}
+            disabled={isRunning}
+          >Boxes</button>
+          <button
+            className={`mode-toggle-btn${config.shape === 'sphere' ? ' active' : ''}`}
+            onClick={() => {
+              onConfigChange({ shape: 'sphere', computeMode: 'cpu', solver: 'advancing_front' });
+              if (mode === 'optimizer') onModeChange('oneshot');
+            }}
+            disabled={isRunning}
+          >Spheres</button>
+        </div>
+
         {/* Run-mode toggle (Optimizer / One-Shot) */}
         <div className="mode-toggle">
           <button
             className={`mode-toggle-btn${mode === 'optimizer' ? ' active' : ''}`}
             onClick={() => onModeChange('optimizer')}
-            disabled={isRunning}
+            disabled={isRunning || config.shape === 'sphere'}
+            title={config.shape === 'sphere' ? 'Spheres only support one-shot packing' : undefined}
           >Optimizer</button>
           <button
             className={`mode-toggle-btn${mode === 'oneshot' ? ' active' : ''}`}
             onClick={() => onModeChange('oneshot')}
-            disabled={isRunning || isGpu}
+            disabled={isRunning || (isGpu && config.shape !== 'sphere')}
             title={isGpu ? 'One-Shot is CPU only' : undefined}
           >One-Shot</button>
         </div>
@@ -78,25 +99,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="config-form">
 
           {/* ── CPU / GPU toggle ── */}
-          <div className="config-group">
-            <label>Compute</label>
-            <div className="mode-toggle" style={{ marginTop: 4 }}>
-              <button
-                className={`mode-toggle-btn${!isGpu ? ' active' : ''}`}
-                onClick={() => onConfigChange({ computeMode: 'cpu' })}
-                disabled={isRunning}
-              >CPU</button>
-              <button
-                className={`mode-toggle-btn${isGpu ? ' active' : ''}`}
-                onClick={() => {
-                  onConfigChange({ computeMode: 'gpu' });
-                  // GPU only supports optimizer mode
-                  if (mode === 'oneshot') onModeChange('optimizer');
-                }}
-                disabled={isRunning}
-              >GPU ⚡</button>
+          {config.shape === 'box' && (
+            <div className="config-group">
+              <label>Compute</label>
+              <div className="mode-toggle" style={{ marginTop: 4 }}>
+                <button
+                  className={`mode-toggle-btn${!isGpu ? ' active' : ''}`}
+                  onClick={() => onConfigChange({ computeMode: 'cpu' })}
+                  disabled={isRunning}
+                >CPU</button>
+                <button
+                  className={`mode-toggle-btn${isGpu ? ' active' : ''}`}
+                  onClick={() => {
+                    onConfigChange({ computeMode: 'gpu' });
+                    // GPU only supports optimizer mode
+                    if (mode === 'oneshot') onModeChange('optimizer');
+                  }}
+                  disabled={isRunning}
+                >GPU ⚡</button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* ── Algorithm selector ── */}
           <div className="config-group">
@@ -105,6 +128,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               // GPU: only one kernel available right now
               <select value={config.gpuSolver} disabled>
                 <option value="best_fit_ems">Best Fit EMS (WebGPU)</option>
+              </select>
+            ) : config.shape === 'sphere' ? (
+              <select
+                value={config.solver}
+                onChange={(e) => onConfigChange({ solver: e.target.value as any })}
+                disabled={isRunning}
+              >
+                <option value="advancing_front">Advancing Front</option>
               </select>
             ) : (
               <select
@@ -119,6 +150,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </select>
             )}
           </div>
+          
+          {config.shape === 'sphere' && (
+             <div className="config-group" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
+                <label style={{ marginBottom: 0 }}>Enable Gap Fill</label>
+                <input 
+                  type="checkbox" 
+                  checked={config.enableGapFill} 
+                  onChange={(e) => onConfigChange({ enableGapFill: e.target.checked })}
+                  disabled={isRunning}
+                />
+             </div>
+          )}
 
           {/* ── Optimizer-only params ── */}
           {mode === 'optimizer' && (
@@ -193,33 +236,47 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {/* ── Bin dimensions ── */}
           <div className="config-row">
-            <div className="config-group config-group--compact">
-              <label>W</label>
-              <input
-                type="number"
-                value={config.binW}
-                onChange={(e) => onConfigChange({ binW: parseInt(e.target.value) || 0 })}
-                disabled={isRunning}
-              />
-            </div>
-            <div className="config-group config-group--compact">
-              <label>H</label>
-              <input
-                type="number"
-                value={config.binH}
-                onChange={(e) => onConfigChange({ binH: parseInt(e.target.value) || 0 })}
-                disabled={isRunning}
-              />
-            </div>
-            <div className="config-group config-group--compact">
-              <label>D</label>
-              <input
-                type="number"
-                value={config.binD}
-                onChange={(e) => onConfigChange({ binD: parseInt(e.target.value) || 0 })}
-                disabled={isRunning}
-              />
-            </div>
+            {config.shape === 'sphere' ? (
+              <div className="config-group config-group--compact">
+                <label>Radius</label>
+                <input
+                  type="number"
+                  value={config.binRadius}
+                  onChange={(e) => onConfigChange({ binRadius: parseInt(e.target.value) || 0 })}
+                  disabled={isRunning}
+                />
+              </div>
+            ) : (
+              <>
+                <div className="config-group config-group--compact">
+                  <label>W</label>
+                  <input
+                    type="number"
+                    value={config.binW}
+                    onChange={(e) => onConfigChange({ binW: parseInt(e.target.value) || 0 })}
+                    disabled={isRunning}
+                  />
+                </div>
+                <div className="config-group config-group--compact">
+                  <label>H</label>
+                  <input
+                    type="number"
+                    value={config.binH}
+                    onChange={(e) => onConfigChange({ binH: parseInt(e.target.value) || 0 })}
+                    disabled={isRunning}
+                  />
+                </div>
+                <div className="config-group config-group--compact">
+                  <label>D</label>
+                  <input
+                    type="number"
+                    value={config.binD}
+                    onChange={(e) => onConfigChange({ binD: parseInt(e.target.value) || 0 })}
+                    disabled={isRunning}
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           {/* GPU hint */}

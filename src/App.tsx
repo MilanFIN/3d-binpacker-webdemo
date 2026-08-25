@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import init, { WasmOptimizer, WasmGeneticPool, init_gpu_generation_state, evaluate_single_placement, pack } from 'rustport';
+import init, { WasmOptimizer, WasmGeneticPool, init_gpu_generation_state, evaluate_single_placement, pack, pack_spheres } from 'rustport';
 import { Viewer } from './components/Viewer';
 import { Sidebar } from './components/Sidebar';
 import type { SidebarConfig } from './components/Sidebar';
-import { generateRandomBoxes, createBoxCloud, parseCsvBoxes, formatCsvExport } from './utils/boxUtils';
-import type { CloudBox, JsResult } from './utils/boxUtils';
+import { generateRandomBoxes, createBoxCloud, parseCsvBoxes, formatCsvExport, generateRandomSpheres, createSphereCloud } from './utils/boxUtils';
+import type { CloudBox, JsResult, CloudSphere, JsResultSpheres } from './utils/boxUtils';
 import './App.css';
 
 /**
@@ -12,6 +12,7 @@ import './App.css';
  */
 function App() {
   const [boxes, setBoxes] = useState<CloudBox[]>([]);
+  const [spheres, setSpheres] = useState<CloudSphere[]>([]);
   const [stats, setStats] = useState({ binCount: 1, score: 0 });
   const [generationCount, setGenerationCount] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -22,6 +23,7 @@ function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   
   const [config, setConfig] = useState<SidebarConfig>({
+    shape: 'box',
     solver: "best_fit_ems",
     gpuSolver: "best_fit_ems",
     computeMode: 'cpu',
@@ -31,6 +33,8 @@ function App() {
     binW: 100,
     binH: 100,
     binD: 100,
+    binRadius: 100,
+    enableGapFill: true,
     gpuBatchSize: 10,
     gpuMaxBins: 16,
     gpuMaxSpaces: 128
@@ -50,19 +54,31 @@ function App() {
 
   // Generate initial cloud
   useEffect(() => {
-    const rawBoxes = generateRandomBoxes(130);
-    const cloudValue = createBoxCloud(rawBoxes);
+    if (config.shape === 'box') {
+      const rawBoxes = generateRandomBoxes(130);
+      const cloudValue = createBoxCloud(rawBoxes);
+      
+      const colors: Record<number, string> = {};
+      cloudValue.forEach(b => { colors[b.id] = b.color; });
+      colorsRef.current = colors;
+      
+      setBoxes(cloudValue);
+    } else {
+      const rawSpheres = generateRandomSpheres(130, 8, 25);
+      const cloudValue = createSphereCloud(rawSpheres);
+      
+      const colors: Record<number, string> = {};
+      cloudValue.forEach(s => { colors[s.id] = s.color; });
+      colorsRef.current = colors;
+      
+      setSpheres(cloudValue);
+    }
     
-    // Store colors for consistency
-    const colors: Record<number, string> = {};
-    cloudValue.forEach(b => { colors[b.id] = b.color; });
-    colorsRef.current = colors;
-    
-    setBoxes(cloudValue);
     // Reset optimizer on new box generation
     if (cpuOptimizerRef.current) cpuOptimizerRef.current = null;
     if (gpuPoolRef.current) gpuPoolRef.current = null;
-  }, []);
+    setStats({ binCount: 1, score: 0 });
+  }, [config.shape]);
 
   const handleStartOptimization = async () => {
     if (!wasmReady) return;
@@ -207,45 +223,85 @@ function App() {
     if (!wasmReady) return;
     setIsRunning(true);
     try {
-      // Sort boxes largest-volume-first for best greedy packing
-      const sortedBoxes = [...boxes].sort(
-        (a, b) => (b.w * b.h * b.d) - (a.w * a.h * a.d)
-      );
-      const jsConfig = {
-        bin: { w: config.binW, h: config.binH, d: config.binD, max_weight: 0 },
-        boxes: sortedBoxes.map(b => ({ id: b.id, w: b.w, h: b.h, d: b.d, weight: b.weight })),
-        solver: config.solver,
-        rotation_axes: [0, 1, 2]
-      };
-      const result: JsResult = pack(jsConfig);
-      if (result) {
-        // Calculate score for one-shot: sum of box volumes in bins 0 to (bin_count - 2)
-        // divided by total volume of those bins.
-        let calculatedScore = 0;
-        if (result.bin_count > 1) {
-          const binVolume = config.binW * config.binH * config.binD;
-          const fullBinsVolume = (result.bin_count - 1) * binVolume;
-          
-          const packedBoxesInFullBins = result.packed.filter(pb => pb.bin_index < result.bin_count - 1);
-          const packedVolume = packedBoxesInFullBins.reduce((sum, pb) => sum + (pb.w * pb.h * pb.d), 0);
-          
-          calculatedScore = packedVolume / fullBinsVolume;
-        }
+      if (config.shape === 'box') {
+        // Sort boxes largest-volume-first for best greedy packing
+        const sortedBoxes = [...boxes].sort(
+          (a, b) => (b.w * b.h * b.d) - (a.w * a.h * a.d)
+        );
+        const jsConfig = {
+          bin: { w: config.binW, h: config.binH, d: config.binD, max_weight: 0 },
+          boxes: sortedBoxes.map(b => ({ id: b.id, w: b.w, h: b.h, d: b.d, weight: b.weight })),
+          solver: config.solver,
+          rotation_axes: [0, 1, 2]
+        };
+        const result: JsResult = pack(jsConfig);
+        if (result) {
+          // Calculate score for one-shot: sum of box volumes in bins 0 to (bin_count - 2)
+          // divided by total volume of those bins.
+          let calculatedScore = 0;
+          if (result.bin_count > 1) {
+            const binVolume = config.binW * config.binH * config.binD;
+            const fullBinsVolume = (result.bin_count - 1) * binVolume;
+            
+            const packedBoxesInFullBins = result.packed.filter(pb => pb.bin_index < result.bin_count - 1);
+            const packedVolume = packedBoxesInFullBins.reduce((sum, pb) => sum + (pb.w * pb.h * pb.d), 0);
+            
+            calculatedScore = packedVolume / fullBinsVolume;
+          }
 
-        const nextBoxes: CloudBox[] = result.packed.map(pb => ({
-          id: pb.id,
-          w: pb.w,
-          h: pb.h,
-          d: pb.d,
-          x: pb.x,
-          y: pb.y,
-          z: pb.z,
-          binIndex: pb.bin_index,
-          weight: pb.weight,
-          color: colorsRef.current[pb.id] || '#ffffff'
-        }));
-        setBoxes(nextBoxes);
-        setStats({ binCount: result.bin_count, score: calculatedScore });
+          const nextBoxes: CloudBox[] = result.packed.map(pb => ({
+            id: pb.id,
+            w: pb.w,
+            h: pb.h,
+            d: pb.d,
+            x: pb.x,
+            y: pb.y,
+            z: pb.z,
+            binIndex: pb.bin_index,
+            weight: pb.weight,
+            color: colorsRef.current[pb.id] || '#ffffff'
+          }));
+          setBoxes(nextBoxes);
+          setStats({ binCount: result.bin_count, score: calculatedScore });
+        }
+      } else {
+        // Sphere packing
+        const sortedSpheres = [...spheres].sort((a, b) => b.radius - a.radius);
+        // The bin for spheres represents a cubic bounding box. The actual radius checks might be up to the solver.
+        // We supply bin w,h,d as 2*radius.
+        const d = config.binRadius * 2;
+        const jsConfig = {
+          bin: { w: d, h: d, d: d, max_weight: 0 },
+          spheres: sortedSpheres.map(s => ({ id: s.id, radius: s.radius, weight: s.weight })),
+          enable_gap_fill: config.enableGapFill
+        };
+        const result: JsResultSpheres = pack_spheres(jsConfig);
+        if (result) {
+          let calculatedScore = 0;
+          if (result.bin_count > 1) {
+            // Using cube volume for bin to keep it simple, or sphere volume if the bin is a sphere
+            const binVolume = d * d * d;
+            const fullBinsVolume = (result.bin_count - 1) * binVolume;
+            
+            const packedInFullBins = result.packed.filter(ps => ps.bin_index < result.bin_count - 1);
+            const packedVolume = packedInFullBins.reduce((sum, ps) => sum + (4/3) * Math.PI * Math.pow(ps.radius, 3), 0);
+            
+            calculatedScore = packedVolume / fullBinsVolume;
+          }
+
+          const nextSpheres: CloudSphere[] = result.packed.map(ps => ({
+            id: ps.id,
+            radius: ps.radius,
+            x: ps.x,
+            y: ps.y,
+            z: ps.z,
+            binIndex: ps.bin_index,
+            weight: ps.weight,
+            color: colorsRef.current[ps.id] || '#ffffff'
+          }));
+          setSpheres(nextSpheres);
+          setStats({ binCount: result.bin_count, score: calculatedScore });
+        }
       }
     } catch (err) {
       console.error('One-shot packing failed:', err);
@@ -304,12 +360,19 @@ function App() {
 
   return (
     <div className="app-container">
-      <Viewer boxes={boxes} binCount={stats.binCount} binSize={{ w: config.binW, h: config.binH, d: config.binD }} />
+      <Viewer 
+        shape={config.shape}
+        boxes={boxes} 
+        spheres={spheres}
+        binCount={stats.binCount} 
+        binSize={{ w: config.binW, h: config.binH, d: config.binD }} 
+        binRadius={config.binRadius}
+      />
       
       {/* UI Overlay */}
       <div className="ui-overlay">
         <h1>3d Binpacker</h1>
-        <p>{boxes.length} {isImported ? 'Boxes to be packed' : 'Boxes pre-generated for demo use'}</p>
+        <p>{config.shape === 'box' ? boxes.length : spheres.length} {isImported ? 'Items to be packed' : 'Items pre-generated for demo use'}</p>
       </div>
 
       {/* Help Button */}
@@ -367,7 +430,7 @@ function App() {
         config={config}
         onConfigChange={(newPart) => setConfig({ ...config, ...newPart })}
         isRunning={isRunning}
-        canExport={boxes.some(b => b.binIndex !== undefined)}
+        canExport={config.shape === 'box' ? boxes.some(b => b.binIndex !== undefined) : spheres.some(s => s.binIndex !== undefined)}
         binCount={stats.binCount}
         score={stats.score}
         generationCount={generationCount}
