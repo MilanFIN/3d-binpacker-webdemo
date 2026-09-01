@@ -90,6 +90,7 @@ function App() {
     try {
       // Check if config changed – if so, reset optimizer
       const configChanged = 
+        config.shape !== prevConfigRef.current.shape ||
         config.solver !== prevConfigRef.current.solver ||
         config.gpuSolver !== prevConfigRef.current.gpuSolver ||
         config.computeMode !== prevConfigRef.current.computeMode ||
@@ -97,7 +98,8 @@ function App() {
         config.eliteCount !== prevConfigRef.current.eliteCount ||
         config.binW !== prevConfigRef.current.binW ||
         config.binH !== prevConfigRef.current.binH ||
-        config.binD !== prevConfigRef.current.binD;
+        config.binD !== prevConfigRef.current.binD ||
+        config.enableGapFill !== prevConfigRef.current.enableGapFill;
 
       if (configChanged) {
         if (cpuOptimizerRef.current) cpuOptimizerRef.current = null;
@@ -108,9 +110,8 @@ function App() {
       }
 
       if (config.shape === 'sphere') {
-        const d = config.binRadius * 2;
         const jsConfig = {
-          bin: { w: d, h: d, d: d, max_weight: 0 },
+          bin: { w: config.binW, h: config.binH, d: config.binD, max_weight: 0 },
           spheres: spheres.map(s => ({ id: s.id, radius: s.radius, weight: s.weight })),
           enable_gap_fill: config.enableGapFill,
           population_size: config.populationSize,
@@ -312,11 +313,8 @@ function App() {
       } else {
         // Sphere packing
         const sortedSpheres = [...spheres].sort((a, b) => b.radius - a.radius);
-        // The bin for spheres represents a cubic bounding box. The actual radius checks might be up to the solver.
-        // We supply bin w,h,d as 2*radius.
-        const d = config.binRadius * 2;
         const jsConfig = {
-          bin: { w: d, h: d, d: d, max_weight: 0 },
+          bin: { w: config.binW, h: config.binH, d: config.binD, max_weight: 0 },
           spheres: sortedSpheres.map(s => ({ id: s.id, radius: s.radius, weight: s.weight })),
           enable_gap_fill: config.enableGapFill
         };
@@ -324,8 +322,7 @@ function App() {
         if (result) {
           let calculatedScore = 0;
           if (result.bin_count > 1) {
-            // Using cube volume for bin to keep it simple, or sphere volume if the bin is a sphere
-            const binVolume = d * d * d;
+            const binVolume = config.binW * config.binH * config.binD;
             const fullBinsVolume = (result.bin_count - 1) * binVolume;
             
             const packedInFullBins = result.packed.filter(ps => ps.bin_index < result.bin_count - 1);
@@ -411,7 +408,6 @@ function App() {
         spheres={spheres}
         binCount={stats.binCount} 
         binSize={{ w: config.binW, h: config.binH, d: config.binD }} 
-        binRadius={config.binRadius}
       />
       
       {/* UI Overlay */}

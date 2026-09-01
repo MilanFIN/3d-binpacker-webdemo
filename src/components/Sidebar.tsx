@@ -234,47 +234,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {/* ── Bin dimensions ── */}
           <div className="config-row">
-            {config.shape === 'sphere' ? (
-              <div className="config-group config-group--compact">
-                <label>Radius</label>
-                <input
-                  type="number"
-                  value={config.binRadius}
-                  onChange={(e) => onConfigChange({ binRadius: parseInt(e.target.value) || 0 })}
-                  disabled={isRunning}
-                />
-              </div>
-            ) : (
-              <>
-                <div className="config-group config-group--compact">
-                  <label>W</label>
-                  <input
-                    type="number"
-                    value={config.binW}
-                    onChange={(e) => onConfigChange({ binW: parseInt(e.target.value) || 0 })}
-                    disabled={isRunning}
-                  />
-                </div>
-                <div className="config-group config-group--compact">
-                  <label>H</label>
-                  <input
-                    type="number"
-                    value={config.binH}
-                    onChange={(e) => onConfigChange({ binH: parseInt(e.target.value) || 0 })}
-                    disabled={isRunning}
-                  />
-                </div>
-                <div className="config-group config-group--compact">
-                  <label>D</label>
-                  <input
-                    type="number"
-                    value={config.binD}
-                    onChange={(e) => onConfigChange({ binD: parseInt(e.target.value) || 0 })}
-                    disabled={isRunning}
-                  />
-                </div>
-              </>
-            )}
+            <div className="config-group config-group--compact">
+              <label>W</label>
+              <input
+                type="number"
+                value={config.binW}
+                onChange={(e) => onConfigChange({ binW: parseInt(e.target.value) || 0 })}
+                disabled={isRunning}
+              />
+            </div>
+            <div className="config-group config-group--compact">
+              <label>H</label>
+              <input
+                type="number"
+                value={config.binH}
+                onChange={(e) => onConfigChange({ binH: parseInt(e.target.value) || 0 })}
+                disabled={isRunning}
+              />
+            </div>
+            <div className="config-group config-group--compact">
+              <label>D</label>
+              <input
+                type="number"
+                value={config.binD}
+                onChange={(e) => onConfigChange({ binD: parseInt(e.target.value) || 0 })}
+                disabled={isRunning}
+              />
+            </div>
           </div>
 
           {/* GPU hint */}
