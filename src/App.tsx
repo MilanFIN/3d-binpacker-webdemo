@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import init, { WasmOptimizer, WasmGeneticPool, init_gpu_generation_state, evaluate_single_placement, pack, pack_spheres } from 'rustport';
+import init, { WasmOptimizer, WasmGeneticPool, init_gpu_generation_state, evaluate_single_placement, pack, pack_spheres, WasmOptimizerSpheres } from 'rustport';
 import { Viewer } from './components/Viewer';
 import { Sidebar } from './components/Sidebar';
 import type { SidebarConfig } from './components/Sidebar';
@@ -41,6 +41,7 @@ function App() {
   });
 
   const cpuOptimizerRef = useRef<WasmOptimizer | null>(null);
+  const cpuOptimizerSpheresRef = useRef<WasmOptimizerSpheres | null>(null);
   const gpuPoolRef = useRef<WasmGeneticPool | null>(null);
   const gpuStateRef = useRef<any>(null);
   const prevConfigRef = useRef<SidebarConfig>(config);
@@ -76,6 +77,7 @@ function App() {
     
     // Reset optimizer on new box generation
     if (cpuOptimizerRef.current) cpuOptimizerRef.current = null;
+    if (cpuOptimizerSpheresRef.current) cpuOptimizerSpheresRef.current = null;
     if (gpuPoolRef.current) gpuPoolRef.current = null;
     setStats({ binCount: 1, score: 0 });
   }, [config.shape]);
@@ -99,114 +101,157 @@ function App() {
 
       if (configChanged) {
         if (cpuOptimizerRef.current) cpuOptimizerRef.current = null;
+        if (cpuOptimizerSpheresRef.current) cpuOptimizerSpheresRef.current = null;
         if (gpuPoolRef.current) gpuPoolRef.current = null;
         prevConfigRef.current = config;
         setGenerationCount(0);
       }
 
-      const jsConfig = {
-        bin: { w: config.binW, h: config.binH, d: config.binD, max_weight: 0 },
-        boxes: boxes.map(b => ({ id: b.id, w: b.w, h: b.h, d: b.d, weight: b.weight })),
-        solver: config.computeMode === 'gpu' ? config.gpuSolver : config.solver,
-        population_size: config.populationSize,
-        elite_count: config.eliteCount,
-        growing_bin: false,
-        grow_axis: "y",
-        rotation_axes: [0, 1, 2]
-      };
+      if (config.shape === 'sphere') {
+        const d = config.binRadius * 2;
+        const jsConfig = {
+          bin: { w: d, h: d, d: d, max_weight: 0 },
+          spheres: spheres.map(s => ({ id: s.id, radius: s.radius, weight: s.weight })),
+          enable_gap_fill: config.enableGapFill,
+          population_size: config.populationSize,
+          elite_count: config.eliteCount,
+          threads: 0
+        };
 
-      // Initialize optimizer if first run after reset
-      if (config.computeMode === 'gpu') {
-        if (!gpuPoolRef.current || !gpuStateRef.current) {
-          gpuPoolRef.current = new WasmGeneticPool(jsConfig);
-          
-          const flatBoxes = new Float32Array(boxes.length * 4);
-          for (let i = 0; i < boxes.length; i++) {
-              flatBoxes[i*4+0] = boxes[i].w;
-              flatBoxes[i*4+1] = boxes[i].h;
-              flatBoxes[i*4+2] = boxes[i].d;
-              flatBoxes[i*4+3] = boxes[i].weight || 1;
+        if (!cpuOptimizerSpheresRef.current) {
+          cpuOptimizerSpheresRef.current = new WasmOptimizerSpheres(jsConfig);
+        }
+
+        let bestScore = stats.score;
+        for (let i = 0; i < config.generations; i++) {
+          if (stopRef.current) break;
+
+          const result: JsResultSpheres = cpuOptimizerSpheresRef.current.run_generation();
+          setGenerationCount(prev => prev + 1);
+
+          if (result && result.score > bestScore) {
+            bestScore = result.score;
+            const nextSpheres: CloudSphere[] = result.packed.map(ps => ({
+              id: ps.id,
+              radius: ps.radius,
+              x: ps.x,
+              y: ps.y,
+              z: ps.z,
+              binIndex: ps.bin_index,
+              weight: ps.weight,
+              color: colorsRef.current[ps.id] || '#ffffff'
+            }));
+            setSpheres(nextSpheres);
+            setStats({ binCount: result.bin_count, score: result.score });
           }
-          const initialOrders = gpuPoolRef.current.get_current_orders_flat();
-          
-          if (gpuStateRef.current) gpuStateRef.current.free();
-          try {
-            gpuStateRef.current = await init_gpu_generation_state(
-                flatBoxes, initialOrders, 
-                config.binW, config.binH, config.binD, 0, 7,
-                config.gpuMaxBins, config.gpuMaxSpaces, config.gpuBatchSize
-            );
-          } catch (gpuErr) {
-            const msg = gpuErr instanceof Error
-              ? gpuErr.message
-              : typeof gpuErr === 'string' ? gpuErr : String(gpuErr);
-            console.error('WebGPU init failed:', gpuErr);
-            setGpuError(msg);
-            setIsRunning(false);
-            return;
-          }
+
+          await new Promise(r => setTimeout(r, 0));
         }
       } else {
-        if (!cpuOptimizerRef.current) {
-          cpuOptimizerRef.current = new WasmOptimizer(jsConfig);
-        }
-      }
+        const jsConfig = {
+          bin: { w: config.binW, h: config.binH, d: config.binD, max_weight: 0 },
+          boxes: boxes.map(b => ({ id: b.id, w: b.w, h: b.h, d: b.d, weight: b.weight })),
+          solver: config.computeMode === 'gpu' ? config.gpuSolver : config.solver,
+          population_size: config.populationSize,
+          elite_count: config.eliteCount,
+          growing_bin: false,
+          grow_axis: "y",
+          rotation_axes: [0, 1, 2]
+        };
 
-      // Run generations one at a time, yielding to the browser between each
-      // so React can repaint with the latest best result.
-      let bestScore = stats.score;
-      let currentGpuBestScore = stats.score;
-      for (let i = 0; i < config.generations; i++) {
-        if (stopRef.current) break;
-
-        let result: JsResult | null = null;
-        
+        // Initialize optimizer if first run after reset
         if (config.computeMode === 'gpu') {
-          const orders = gpuPoolRef.current!.get_current_orders_flat();
-          const scores = await gpuStateRef.current.evaluate(orders);
-          
-          let genBestScore = -Infinity;
-          for (let j = 0; j < scores.length; j++) {
-            if (scores[j] > genBestScore) {
-              genBestScore = scores[j];
+          if (!gpuPoolRef.current || !gpuStateRef.current) {
+            gpuPoolRef.current = new WasmGeneticPool(jsConfig);
+            
+            const flatBoxes = new Float32Array(boxes.length * 4);
+            for (let i = 0; i < boxes.length; i++) {
+                flatBoxes[i*4+0] = boxes[i].w;
+                flatBoxes[i*4+1] = boxes[i].h;
+                flatBoxes[i*4+2] = boxes[i].d;
+                flatBoxes[i*4+3] = boxes[i].weight || 1;
+            }
+            const initialOrders = gpuPoolRef.current.get_current_orders_flat();
+            
+            if (gpuStateRef.current) gpuStateRef.current.free();
+            try {
+              gpuStateRef.current = await init_gpu_generation_state(
+                  flatBoxes, initialOrders, 
+                  config.binW, config.binH, config.binD, 0, 7,
+                  config.gpuMaxBins, config.gpuMaxSpaces, config.gpuBatchSize
+              );
+            } catch (gpuErr) {
+              const msg = gpuErr instanceof Error
+                ? gpuErr.message
+                : typeof gpuErr === 'string' ? gpuErr : String(gpuErr);
+              console.error('WebGPU init failed:', gpuErr);
+              setGpuError(msg);
+              setIsRunning(false);
+              return;
             }
           }
-          
-          gpuPoolRef.current!.advance_generation(scores);
-          
-          // CPU Fallback to reconstruct winning permutation for rendering
-          // Only do this if the GPU found a strictly better score
-          if (genBestScore > currentGpuBestScore) {
-            currentGpuBestScore = genBestScore;
-            result = evaluate_single_placement(jsConfig, gpuPoolRef.current!.get_best_order());
-          }
         } else {
-          result = cpuOptimizerRef.current!.run_generation();
-        }
-        
-        setGenerationCount(prev => prev + 1);
-
-        // Paint immediately if this generation produced a better solution
-        if (result && result.score > bestScore) {
-          bestScore = result.score;
-          const nextBoxes: CloudBox[] = result.packed.map(pb => ({
-            id: pb.id,
-            w: pb.w,
-            h: pb.h,
-            d: pb.d,
-            x: pb.x,
-            y: pb.y,
-            z: pb.z,
-            binIndex: pb.bin_index,
-            weight: pb.weight,
-            color: colorsRef.current[pb.id] || '#ffffff'
-          }));
-          setBoxes(nextBoxes);
-          setStats({ binCount: result.bin_count, score: result.score });
+          if (!cpuOptimizerRef.current) {
+            cpuOptimizerRef.current = new WasmOptimizer(jsConfig);
+          }
         }
 
-        // Yield to browser event loop so the UI can repaint and handle stop clicks
-        await new Promise(r => setTimeout(r, 0));
+        // Run generations one at a time, yielding to the browser between each
+        // so React can repaint with the latest best result.
+        let bestScore = stats.score;
+        let currentGpuBestScore = stats.score;
+        for (let i = 0; i < config.generations; i++) {
+          if (stopRef.current) break;
+
+          let result: JsResult | null = null;
+          
+          if (config.computeMode === 'gpu') {
+            const orders = gpuPoolRef.current!.get_current_orders_flat();
+            const scores = await gpuStateRef.current.evaluate(orders);
+            
+            let genBestScore = -Infinity;
+            for (let j = 0; j < scores.length; j++) {
+              if (scores[j] > genBestScore) {
+                genBestScore = scores[j];
+              }
+            }
+            
+            gpuPoolRef.current!.advance_generation(scores);
+            
+            // CPU Fallback to reconstruct winning permutation for rendering
+            // Only do this if the GPU found a strictly better score
+            if (genBestScore > currentGpuBestScore) {
+              currentGpuBestScore = genBestScore;
+              result = evaluate_single_placement(jsConfig, gpuPoolRef.current!.get_best_order());
+            }
+          } else {
+            result = cpuOptimizerRef.current!.run_generation();
+          }
+          
+          setGenerationCount(prev => prev + 1);
+
+          // Paint immediately if this generation produced a better solution
+          if (result && result.score > bestScore) {
+            bestScore = result.score;
+            const nextBoxes: CloudBox[] = result.packed.map(pb => ({
+              id: pb.id,
+              w: pb.w,
+              h: pb.h,
+              d: pb.d,
+              x: pb.x,
+              y: pb.y,
+              z: pb.z,
+              binIndex: pb.bin_index,
+              weight: pb.weight,
+              color: colorsRef.current[pb.id] || '#ffffff'
+            }));
+            setBoxes(nextBoxes);
+            setStats({ binCount: result.bin_count, score: result.score });
+          }
+
+          // Yield to browser event loop so the UI can repaint and handle stop clicks
+          await new Promise(r => setTimeout(r, 0));
+        }
       }
     } catch (err) {
       console.error("Optimization failed:", err);

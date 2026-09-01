@@ -58,6 +58,13 @@ export class WasmOptimizer {
     run_generation(): any;
 }
 
+export class WasmOptimizerSpheres {
+    free(): void;
+    [Symbol.dispose](): void;
+    constructor(config: any);
+    run_generation(): any;
+}
+
 export function evaluate_single_placement(config: any, best_order: Int32Array): any;
 
 export function init_gpu_generation_state(boxes_flat: Float32Array, orders_flat: Int32Array, bin_w: number, bin_h: number, bin_d: number, bin_weight: number, rotation_mask: number, max_bins: number, max_spaces_per_bin: number, batch_size: number): Promise<GpuGenerationState>;
@@ -89,6 +96,7 @@ export interface InitOutput {
     readonly __wbg_gpugenerationstate_free: (a: number, b: number) => void;
     readonly __wbg_wasmgeneticpool_free: (a: number, b: number) => void;
     readonly __wbg_wasmoptimizer_free: (a: number, b: number) => void;
+    readonly __wbg_wasmoptimizerspheres_free: (a: number, b: number) => void;
     readonly evaluate_single_placement: (a: any, b: number, c: number) => [number, number, number];
     readonly gpugenerationstate_evaluate: (a: number, b: number, c: number) => any;
     readonly init_gpu_generation_state: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
@@ -100,6 +108,8 @@ export interface InitOutput {
     readonly wasmgeneticpool_new: (a: any) => [number, number, number];
     readonly wasmoptimizer_new: (a: any) => [number, number, number];
     readonly wasmoptimizer_run_generation: (a: number) => any;
+    readonly wasmoptimizerspheres_new: (a: any) => [number, number, number];
+    readonly wasmoptimizerspheres_run_generation: (a: number) => [number, number, number];
     readonly start: () => void;
     readonly wasm_bindgen__convert__closures_____invoke__hcf53d5153dee6e07: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen__convert__closures_____invoke__h4657a9fbfdc97dd1: (a: number, b: number, c: any, d: any) => void;

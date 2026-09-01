@@ -74,7 +74,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className={`mode-toggle-btn${config.shape === 'sphere' ? ' active' : ''}`}
             onClick={() => {
               onConfigChange({ shape: 'sphere', computeMode: 'cpu', solver: 'advancing_front' });
-              if (mode === 'optimizer') onModeChange('oneshot');
             }}
             disabled={isRunning}
           >Spheres</button>
@@ -85,8 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             className={`mode-toggle-btn${mode === 'optimizer' ? ' active' : ''}`}
             onClick={() => onModeChange('optimizer')}
-            disabled={isRunning || config.shape === 'sphere'}
-            title={config.shape === 'sphere' ? 'Spheres only support one-shot packing' : undefined}
+            disabled={isRunning}
           >Optimizer</button>
           <button
             className={`mode-toggle-btn${mode === 'oneshot' ? ' active' : ''}`}

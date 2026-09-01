@@ -16,7 +16,7 @@ const BIN_SPACING = 50;
 /**
  * A fullscreen Three.js viewer component.
  */
-export function Viewer({ shape = 'box', boxes, spheres = [], binCount, binSize, binRadius = 100 }: ViewerProps) {
+export function Viewer({ shape = 'box', boxes, spheres = [], binCount, binSize }: ViewerProps) {
   // Array of bin indices to map over for rendering wireframes
   const binIndices = Array.from({ length: Math.max(1, binCount) }, (_, i) => i);
 
