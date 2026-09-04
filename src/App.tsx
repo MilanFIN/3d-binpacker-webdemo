@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import init, { WasmOptimizer, WasmGeneticPool, init_gpu_generation_state, evaluate_single_placement, pack, pack_spheres, WasmOptimizerSpheres } from 'rustport';
+import init, { WasmOptimizer, WasmGeneticPool, init_gpu_generation_state, evaluate_single_placement, pack, pack_spheres, WasmOptimizerSpheres, postprocess_result } from 'rustport';
 import { Viewer } from './components/Viewer';
 import { Sidebar } from './components/Sidebar';
 import type { SidebarConfig } from './components/Sidebar';
@@ -285,7 +285,10 @@ function App() {
           solver: config.solver,
           rotation_axes: [0, 1, 2]
         };
-        const result: JsResult = pack(jsConfig);
+        let result: JsResult = pack(jsConfig);
+        if (result && config.enablePostprocessor) {
+          result = postprocess_result(result, jsConfig.bin, "boxes");
+        }
         if (result) {
           // Calculate score for one-shot: sum of box volumes in bins 0 to (bin_count - 2)
           // divided by total volume of those bins.
@@ -323,7 +326,10 @@ function App() {
           spheres: sortedSpheres.map(s => ({ id: s.id, radius: s.radius, weight: s.weight })),
           enable_gap_fill: config.enableGapFill
         };
-        const result: JsResultSpheres = pack_spheres(jsConfig);
+        let result: JsResultSpheres = pack_spheres(jsConfig);
+        if (result && config.enablePostprocessor) {
+          result = postprocess_result(result, jsConfig.bin, "spheres");
+        }
         if (result) {
           let calculatedScore = 0;
           if (result.bin_count > 1) {

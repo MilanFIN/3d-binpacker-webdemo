@@ -10,6 +10,7 @@ export const gpugenerationstate_evaluate: (a: number, b: number, c: number) => a
 export const init_gpu_generation_state: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
 export const pack: (a: any) => [number, number, number];
 export const pack_spheres: (a: any) => [number, number, number];
+export const postprocess_result: (a: any, b: any, c: number, d: number) => [number, number, number];
 export const wasmgeneticpool_advance_generation: (a: number, b: number, c: number) => void;
 export const wasmgeneticpool_get_best_order: (a: number) => any;
 export const wasmgeneticpool_get_current_orders_flat: (a: number) => any;

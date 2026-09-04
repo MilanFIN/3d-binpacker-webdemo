@@ -87,6 +87,8 @@ export function pack(config: any): any;
 
 export function pack_spheres(config: any): any;
 
+export function postprocess_result(packed_result: any, bin_config: any, kind: string): any;
+
 export function start(): void;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -102,6 +104,7 @@ export interface InitOutput {
     readonly init_gpu_generation_state: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
     readonly pack: (a: any) => [number, number, number];
     readonly pack_spheres: (a: any) => [number, number, number];
+    readonly postprocess_result: (a: any, b: any, c: number, d: number) => [number, number, number];
     readonly wasmgeneticpool_advance_generation: (a: number, b: number, c: number) => void;
     readonly wasmgeneticpool_get_best_order: (a: number) => any;
     readonly wasmgeneticpool_get_current_orders_flat: (a: number) => any;
