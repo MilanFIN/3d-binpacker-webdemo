@@ -13,6 +13,7 @@ export interface SidebarConfig {
   binD: number;
   binRadius: number;
   enableGapFill: boolean;
+  enablePostprocessor: boolean;
   gpuBatchSize: number;
   gpuMaxBins: number;
   gpuMaxSpaces: number;
@@ -160,6 +161,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 />
              </div>
           )}
+
+          <div className="config-group" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
+             <label style={{ marginBottom: 0 }}>Enable Postprocessor</label>
+             <input 
+               type="checkbox" 
+               checked={config.enablePostprocessor} 
+               onChange={(e) => onConfigChange({ enablePostprocessor: e.target.checked })}
+               disabled={isRunning}
+             />
+          </div>
 
           {/* ── Optimizer-only params ── */}
           {mode === 'optimizer' && (

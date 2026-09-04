@@ -35,6 +35,7 @@ function App() {
     binD: 100,
     binRadius: 100,
     enableGapFill: true,
+    enablePostprocessor: false,
     gpuBatchSize: 10,
     gpuMaxBins: 16,
     gpuMaxSpaces: 128
@@ -99,7 +100,8 @@ function App() {
         config.binW !== prevConfigRef.current.binW ||
         config.binH !== prevConfigRef.current.binH ||
         config.binD !== prevConfigRef.current.binD ||
-        config.enableGapFill !== prevConfigRef.current.enableGapFill;
+        config.enableGapFill !== prevConfigRef.current.enableGapFill ||
+        config.enablePostprocessor !== prevConfigRef.current.enablePostprocessor;
 
       if (configChanged) {
         if (cpuOptimizerRef.current) cpuOptimizerRef.current = null;
@@ -114,6 +116,7 @@ function App() {
           bin: { w: config.binW, h: config.binH, d: config.binD, max_weight: 0 },
           spheres: spheres.map(s => ({ id: s.id, radius: s.radius, weight: s.weight })),
           enable_gap_fill: config.enableGapFill,
+          enable_postprocessor: config.enablePostprocessor,
           population_size: config.populationSize,
           elite_count: config.eliteCount,
           threads: 0
@@ -157,7 +160,9 @@ function App() {
           elite_count: config.eliteCount,
           growing_bin: false,
           grow_axis: "y",
-          rotation_axes: [0, 1, 2]
+          rotation_axes: [0, 1, 2],
+          enable_postprocessor: config.enablePostprocessor,
+          postprocessor_kind: "boxes"
         };
 
         // Initialize optimizer if first run after reset
